@@ -1,0 +1,17 @@
+node_modules
+.next
+dist
+build
+.env
+.env.local
+.env.production
+.env.example
+*.log
+.DS_Store
+.vscode
+coverage
+out
+*.tsbuildinfo
+backend/storage/installers/windows/*.exe
+backend/storage/installers/generated/**/*.exe
+agent/windows-go/*.exe

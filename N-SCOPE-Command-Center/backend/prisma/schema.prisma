@@ -1,0 +1,430 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  NOC_ENGINEER
+  SUPPORT_ENGINEER
+  CLIENT_ADMIN
+  CLIENT_VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientStatus {
+  HEALTHY
+  WARNING
+  CRITICAL
+  INACTIVE
+}
+
+enum SiteStatus {
+  HEALTHY
+  WARNING
+  CRITICAL
+  INACTIVE
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+  WARNING
+  CRITICAL
+  RETIRED
+}
+
+enum AssetStatus {
+  ACTIVE
+  AT_RISK
+  SERVICE_DUE
+  RETIRED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum NetworkDeviceStatus {
+  NEW
+  KNOWN
+  IGNORED
+}
+
+model User {
+  id              String          @id @default(uuid())
+  name            String
+  email           String          @unique
+  passwordHash    String          @map("password_hash")
+  role            UserRole
+  clientId        String?         @map("client_id")
+  status          UserStatus      @default(ACTIVE)
+  lastLogin       DateTime?       @map("last_login")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  client          Client?         @relation("ClientUsers", fields: [clientId], references: [id])
+  assignedTickets Ticket[]        @relation("AssignedTickets")
+  assignedClients Client[]        @relation("AssignedClientEngineer")
+  assignedSites   Site[]          @relation("AssignedSiteEngineer")
+  createdTickets  Ticket[]        @relation("CreatedTickets")
+  comments        TicketComment[]
+  auditLogs       AuditLog[]
+  createdAgentInstallTokens AgentInstallToken[] @relation("CreatedAgentInstallTokens")
+  createdAgentTasks AgentTask[]    @relation("CreatedAgentTasks")
+
+  @@map("users")
+}
+
+model Client {
+  id            String          @id @default(uuid())
+  name          String
+  contactPerson String          @map("contact_person")
+  email         String
+  phone         String
+  address       String?
+  status        ClientStatus    @default(HEALTHY)
+  slaPlan       String          @map("sla_plan")
+  assignedEngineerId String?    @map("assigned_engineer_id")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  users         User[]          @relation("ClientUsers")
+  sites         Site[]
+  devices       Device[]
+  assets        Asset[]
+  tickets       Ticket[]
+  networkDevices NetworkDevice[]
+  agentInstallTokens AgentInstallToken[]
+  assignedEngineer User?        @relation("AssignedClientEngineer", fields: [assignedEngineerId], references: [id], onDelete: SetNull)
+
+  @@index([assignedEngineerId])
+  @@map("clients")
+}
+
+model Site {
+  id           String          @id @default(uuid())
+  clientId     String          @map("client_id")
+  name         String
+  location     String
+  networkRange String          @map("network_range")
+  status       SiteStatus      @default(HEALTHY)
+  assignedEngineerId String?   @map("assigned_engineer_id")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  devices      Device[]
+  assets       Asset[]
+  tickets      Ticket[]
+  networkDevices NetworkDevice[]
+  agentInstallTokens AgentInstallToken[]
+  assignedEngineer User?       @relation("AssignedSiteEngineer", fields: [assignedEngineerId], references: [id], onDelete: SetNull)
+
+  @@index([assignedEngineerId])
+  @@map("sites")
+}
+
+model Device {
+  id           String       @id @default(uuid())
+  clientId     String       @map("client_id")
+  siteId       String       @map("site_id")
+  hostname     String
+  os           String
+  osName       String?      @map("os_name")
+  osVersion    String?      @map("os_version")
+  osBuild      String?      @map("os_build")
+  ipAddress    String       @map("ip_address")
+  macAddress   String       @map("mac_address")
+  status       DeviceStatus @default(ONLINE)
+  lastSeen     DateTime?    @map("last_seen")
+  agentVersion String?      @map("agent_version")
+  assignedUser String?      @map("assigned_user")
+  deviceType   String       @map("device_type")
+  serialNumber String?      @map("serial_number")
+  biosSerialNumber String?  @map("bios_serial_number")
+  motherboardSerialNumber String? @map("motherboard_serial_number")
+  manufacturer String?
+  model        String?
+  cpu          String?
+  cpuCores     Int?         @map("cpu_cores")
+  ramBytes     BigInt?      @map("ram_bytes")
+  diskBytes    BigInt?      @map("disk_bytes")
+  diskFreeBytes BigInt?     @map("disk_free_bytes")
+  diskModel    String?      @map("disk_model")
+  meshNodeId   String?      @map("mesh_node_id")
+  remoteControlEnabled Boolean @default(false) @map("remote_control_enabled")
+  remoteConsentRequired Boolean @default(true) @map("remote_consent_required")
+  lastUninstalledAt DateTime? @map("last_uninstalled_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site         Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+  tickets      Ticket[]
+  agent        Agent?
+  metrics      DeviceMetric[]
+  installedSoftware InstalledSoftware[]
+  deviceServices DeviceService[]
+  deviceProcesses DeviceProcess[]
+  agentTasks   AgentTask[]
+  agentHeartbeats AgentHeartbeat[]
+
+  @@map("devices")
+}
+
+model Asset {
+  id             String      @id @default(uuid())
+  clientId       String      @map("client_id")
+  siteId         String      @map("site_id")
+  deviceId       String?     @map("device_id")
+  name           String?
+  assetTag       String      @unique @map("asset_tag")
+  serialNumber   String      @map("serial_number")
+  deviceType     String      @map("device_type")
+  assignedUser   String?     @map("assigned_user")
+  location       String
+  purchaseDate   DateTime?   @map("purchase_date")
+  warrantyExpiry DateTime?   @map("warranty_expiry")
+  status         AssetStatus @default(ACTIVE)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  client         Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site           Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  device         Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  tickets        Ticket[]
+
+  @@map("assets")
+}
+
+model Ticket {
+  id                 String          @id @default(uuid())
+  ticketNumber       String          @unique @map("ticket_number")
+  clientId           String          @map("client_id")
+  siteId             String?         @map("site_id")
+  deviceId           String?         @map("device_id")
+  assetId            String?         @map("asset_id")
+  subject            String
+  description        String
+  priority           TicketPriority
+  status             TicketStatus    @default(OPEN)
+  assignedEngineerId String?         @map("assigned_engineer_id")
+  createdById        String          @map("created_by_id")
+  slaDue             DateTime?       @map("sla_due")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  client             Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site               Site?           @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  device             Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  asset              Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  assignedEngineer   User?           @relation("AssignedTickets", fields: [assignedEngineerId], references: [id], onDelete: SetNull)
+  createdBy          User            @relation("CreatedTickets", fields: [createdById], references: [id])
+  comments           TicketComment[]
+
+  @@map("tickets")
+}
+
+model TicketComment {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  userId    String   @map("user_id")
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("ticket_comments")
+}
+
+model NetworkDevice {
+  id           String              @id @default(uuid())
+  clientId     String              @map("client_id")
+  siteId       String              @map("site_id")
+  ipAddress    String              @map("ip_address")
+  hostname     String
+  macAddress   String?             @map("mac_address")
+  vendor       String?
+  deviceType   String              @map("device_type")
+  openPorts    String?             @map("open_ports")
+  status       NetworkDeviceStatus @default(NEW)
+  discoveredAt DateTime            @default(now()) @map("discovered_at")
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site         Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("network_devices")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  action      String
+  module      String
+  description String
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model AgentInstallToken {
+  id          String   @id @default(uuid())
+  tokenHash   String   @unique @map("token_hash")
+  tokenCipher String?  @map("token_cipher")
+  clientId    String   @map("client_id")
+  siteId      String   @map("site_id")
+  os          String   @default("WINDOWS")
+  agentType   String   @default("MODERN_WINDOWS") @map("agent_type")
+  deviceType  String   @default("Workstation") @map("device_type")
+  expiresAt   DateTime @map("expires_at")
+  maxUses     Int      @default(1) @map("max_uses")
+  usedCount   Int      @default(0) @map("used_count")
+  isRevoked   Boolean  @default(false) @map("is_revoked")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("CreatedAgentInstallTokens", fields: [createdById], references: [id], onDelete: SetNull)
+  agents      Agent[]
+
+  @@map("agent_install_tokens")
+}
+
+model Agent {
+  id             String   @id @default(uuid())
+  deviceId       String   @unique @map("device_id")
+  agentId        String   @unique @map("agent_id")
+  tokenHash      String   @map("token_hash")
+  installTokenId String?  @map("install_token_id")
+  version        String
+  os             String
+  status         String   @default("ONLINE")
+  meshNodeId     String?  @map("mesh_node_id")
+  meshGroupId    String?  @map("mesh_group_id")
+  lastUninstalledAt DateTime? @map("last_uninstalled_at")
+  lastSeen       DateTime? @map("last_seen")
+  registeredAt   DateTime @default(now()) @map("registered_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  installToken   AgentInstallToken? @relation(fields: [installTokenId], references: [id], onDelete: SetNull)
+  heartbeats     AgentHeartbeat[]
+  tasks          AgentTask[]
+
+  @@map("agents")
+}
+
+model AgentHeartbeat {
+  id           String   @id @default(uuid())
+  agentId      String   @map("agent_id")
+  deviceId     String   @map("device_id")
+  cpuUsage     Float?   @map("cpu_usage")
+  memoryUsage  Float?   @map("memory_usage")
+  diskUsage    Float?   @map("disk_usage")
+  uptime       String?
+  loggedInUser String?  @map("logged_in_user")
+  ipAddress    String?  @map("ip_address")
+  macAddress   String?  @map("mac_address")
+  collectedAt  DateTime @default(now()) @map("collected_at")
+  agent        Agent    @relation(fields: [agentId], references: [agentId], onDelete: Cascade)
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("agent_heartbeats")
+}
+
+model DeviceMetric {
+  id          String   @id @default(uuid())
+  deviceId    String   @map("device_id")
+  cpuUsage    Float?   @map("cpu_usage")
+  memoryUsage Float?   @map("memory_usage")
+  diskUsage   Float?   @map("disk_usage")
+  uptime      String?
+  collectedAt DateTime @default(now()) @map("collected_at")
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("device_metrics")
+}
+
+model InstalledSoftware {
+  id          String   @id @default(uuid())
+  deviceId    String   @map("device_id")
+  name        String
+  version     String?
+  publisher   String?
+  installDate String?  @map("install_date")
+  source      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("installed_software")
+}
+
+model DeviceService {
+  id          String   @id @default(uuid())
+  deviceId    String   @map("device_id")
+  serviceName String   @map("service_name")
+  displayName String?  @map("display_name")
+  status      String
+  startType   String?  @map("start_type")
+  pathName    String?  @map("path_name")
+  accountName String?  @map("account_name")
+  collectedAt DateTime @default(now()) @map("collected_at")
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@map("device_services")
+}
+
+model DeviceProcess {
+  id             String   @id @default(uuid())
+  deviceId       String   @map("device_id")
+  pid            Int
+  processName    String   @map("process_name")
+  executablePath String?  @map("executable_path")
+  username       String?
+  cpuUsage       Float?   @map("cpu_usage")
+  memoryBytes    BigInt?  @map("memory_bytes")
+  collectedAt    DateTime @default(now()) @map("collected_at")
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@map("device_processes")
+}
+
+model AgentTask {
+  id          String   @id @default(uuid())
+  agentId     String?  @map("agent_id")
+  deviceId    String   @map("device_id")
+  type        String
+  command     String?
+  status      String   @default("PENDING")
+  output      String?
+  errorOutput String?  @map("error_output")
+  exitCode    Int?     @map("exit_code")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  agent       Agent?   @relation(fields: [agentId], references: [agentId], onDelete: SetNull)
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("CreatedAgentTasks", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("agent_tasks")
+}

@@ -1,0 +1,31 @@
+name: Deploy N-SCOPE Command Center
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Deploy latest code on server
+        run: |
+          cd /var/www/nscope-command-center
+          git fetch origin main
+          git reset --hard origin/main
+
+          npm install
+          npm run build
+          pm2 restart nscope-command-center --update-env || pm2 start npm --name nscope-command-center -- start
+
+          cd /var/www/nscope-command-center/backend
+          npm install
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+          pm2 restart nscope-backend --update-env || pm2 start npm --name nscope-backend -- start
+
+          pm2 save
+          pm2 status
