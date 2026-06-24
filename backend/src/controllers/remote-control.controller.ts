@@ -36,11 +36,11 @@ export async function getDeviceRemoteControl(req: Request, res: Response) {
 
   if (!meshNodeId) {
     return res.json({
-    configured: getMeshStatus().configured,
-    remoteControlEnabled: false,
-    remoteConsentRequired: Boolean(device.remoteConsentRequired),
-    consentMessage: device.remoteConsentRequired ? "User consent required on workstation" : "Server remote control allowed",
-    message: "Remote control not linked yet",
+      configured: getMeshStatus().configured,
+      remoteControlEnabled: false,
+      remoteConsentRequired: Boolean(device.remoteConsentRequired),
+      consentMessage: device.remoteConsentRequired ? "User consent required on workstation" : "Server remote control allowed",
+      message: "Remote control not linked yet",
     });
   }
 
